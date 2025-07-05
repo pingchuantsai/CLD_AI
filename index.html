@@ -952,7 +952,7 @@
                     if (topItemsElement) topItemsElement.innerHTML = topItemsHtml;
 
                     // Generate PCoA Analysis
-                    generatePCoA(allItems, topItemNames);
+                    generatePCoA(allItems, topItemNames,dic);
 
                     // Update CSV table with calculated scores
                     updateCSVTableWithScores(allItems, topItemNames);
@@ -967,40 +967,58 @@
             
             reader.readAsText(file);
         }
-
-        function generatePCoA(allItems, topItemNames) {
+function generatePCoA(allItems, topItemNames, dicData) {
             const pcoaChartElement = document.getElementById('pcoaChart');
             if (!pcoaChartElement) {
                 console.error('pcoaChart element not found');
                 return;
             }
             
-            // Simple 2D projection using score and a secondary metric for demonstration
-            // In real PCoA, this would involve distance matrices and eigenvalue decomposition
+            // Create distance matrix from the raw data for proper PCoA
+            const distanceMatrix = createDistanceMatrix(allItems, dicData);
+            
+            // Run proper PCoA analysis
+            const pcoaResults = pcoa(distanceMatrix, 2);
             
             const containerWidth = 500;
             const containerHeight = 400;
             const margin = 50;
             
-            // Create synthetic coordinates based on available data
-            // PC1: Based on score (primary component)
-            // PC2: Based on item name hash (secondary component for spread)
-            const coords = allItems.map(item => {
-                const score = item[1];
-                const nameHash = item[0].split('').reduce((hash, char) => hash + char.charCodeAt(0), 0);
+            // Extract coordinates from PCoA results
+            const coords = [];
+            for (const itemName of Object.keys(pcoaResults.coordinates)) {
+                const pcoaCoords = pcoaResults.coordinates[itemName];
+                coords.push({
+                    name: itemName,
+                    score: allItems.find(item => item[0] === itemName)?.[1] || 0,
+                    x: pcoaCoords[0],
+                    y: pcoaCoords[1],
+                    isTop: topItemNames.has(itemName)
+                });
+            }
+            
+            // Normalize coordinates to container size
+            if (coords.length > 0) {
+                const xVals = coords.map(c => c.x);
+                const yVals = coords.map(c => c.y);
+                const xMin = Math.min(...xVals);
+                const xMax = Math.max(...xVals);
+                const yMin = Math.min(...yVals);
+                const yMax = Math.max(...yVals);
                 
-                // Normalize coordinates to container size with margins
-                const x = margin + ((score + 1) / (Math.max(...allItems.map(i => i[1])) + 2)) * (containerWidth - 2 * margin);
-                const y = margin + ((nameHash % 100) / 100) * (containerHeight - 2 * margin);
-                
-                return {
-                    name: item[0],
-                    score: item[1],
-                    x: x,
-                    y: y,
-                    isTop: topItemNames.has(item[0])
-                };
-            });
+                coords.forEach(coord => {
+                    if (xMax !== xMin) {
+                        coord.x = margin + ((coord.x - xMin) / (xMax - xMin)) * (containerWidth - 2 * margin);
+                    } else {
+                        coord.x = containerWidth / 2;
+                    }
+                    if (yMax !== yMin) {
+                        coord.y = margin + ((yMax - coord.y) / (yMax - yMin)) * (containerHeight - 2 * margin); // Flip Y axis
+                    } else {
+                        coord.y = containerHeight / 2;
+                    }
+                });
+            }
             
             // Create PCoA visualization
             let pcoaHtml = `
@@ -1008,8 +1026,8 @@
                     <div class="pcoa-axes">
                         <div class="pcoa-axis-x"></div>
                         <div class="pcoa-axis-y"></div>
-                        <div class="pcoa-axis-label x-axis">PC1 (Score-based)</div>
-                        <div class="pcoa-axis-label y-axis">PC2</div>
+                        <div class="pcoa-axis-label x-axis">PC1 (${pcoaResults.varianceExplained[0]?.toFixed(1)}%)</div>
+                        <div class="pcoa-axis-label y-axis">PC2 (${pcoaResults.varianceExplained[1]?.toFixed(1)}%)</div>
                     </div>`;
             
             // Add points
@@ -1030,9 +1048,269 @@
             
             pcoaChartElement.innerHTML = pcoaHtml;
             
-            console.log('PCoA coordinates:', coords);
+            console.log('PCoA Results:', pcoaResults);
+            console.log('PCoA Coordinates:', coords);
         }
 
+        function createDistanceMatrix(allItems, dicData) {
+            // Create distance matrix based on the actual data values in dicData
+            const distanceMatrix = {};
+            
+            // Get all items and their data
+            const items = [];
+            for (let key in dicData) {
+                items.push({
+                    name: key,
+                    values: dicData[key]
+                });
+            }
+            
+            // Calculate Euclidean distances between all pairs
+            for (let i = 0; i < items.length; i++) {
+                const itemA = items[i];
+                distanceMatrix[itemA.name] = {};
+                
+                for (let j = 0; j < items.length; j++) {
+                    const itemB = items[j];
+                    
+                    if (i === j) {
+                        distanceMatrix[itemA.name][itemB.name] = 0;
+                    } else {
+                        let sumSquares = 0;
+                        const minLength = Math.min(itemA.values.length, itemB.values.length);
+                        
+                        for (let k = 0; k < minLength; k++) {
+                            const diff = itemA.values[k] - itemB.values[k];
+                            sumSquares += diff * diff;
+                        }
+                        
+                        const distance = Math.sqrt(sumSquares);
+                        distanceMatrix[itemA.name][itemB.name] = distance;
+                    }
+                }
+            }
+            
+            return distanceMatrix;
+        }
+function pcoa(distanceDict, dimensions = 2) {
+            // Step 1: Convert dictionary to matrix and get sample names
+            const samples = Object.keys(distanceDict);
+            const n = samples.length;
+            const D = [];
+            
+            for (let i = 0; i < n; i++) {
+                D[i] = [];
+                for (let j = 0; j < n; j++) {
+                    D[i][j] = distanceDict[samples[i]][samples[j]];
+                }
+            }
+            
+            // Step 2: Square the distance matrix
+            const D2 = [];
+            for (let i = 0; i < n; i++) {
+                D2[i] = [];
+                for (let j = 0; j < n; j++) {
+                    D2[i][j] = D[i][j] * D[i][j];
+                }
+            }
+            
+            // Step 3: Double center the squared distance matrix
+            const B = doubleCenterMatrix(D2);
+            
+            // Step 4: Eigendecomposition of B
+            const eigen = eigenDecomposition(B);
+            
+            // Step 5: Sort eigenvalues and eigenvectors in descending order
+            const indices = Array.from({length: n}, (_, i) => i)
+                .sort((a, b) => eigen.values[b] - eigen.values[a]);
+            
+            const sortedValues = indices.map(i => eigen.values[i]);
+            const sortedVectors = indices.map(i => eigen.vectors[i]);
+            
+            // Step 6: Calculate coordinates
+            const coords = {};
+            for (let i = 0; i < n; i++) {
+                coords[samples[i]] = [];
+                for (let j = 0; j < Math.min(dimensions, n); j++) {
+                    if (sortedValues[j] > 0) {
+                        coords[samples[i]][j] = sortedVectors[j][i] * Math.sqrt(sortedValues[j]);
+                    } else {
+                        coords[samples[i]][j] = 0;
+                    }
+                }
+            }
+            
+            // Step 7: Calculate variance explained
+            const positiveEigenvalues = sortedValues.filter(v => v > 0);
+            const totalVariance = positiveEigenvalues.reduce((a, b) => a + b, 0);
+            const varianceExplained = [];
+            
+            for (let i = 0; i < Math.min(dimensions, positiveEigenvalues.length); i++) {
+                varianceExplained[i] = (positiveEigenvalues[i] / totalVariance) * 100;
+            }
+            
+            return {
+                coordinates: coords,
+                eigenvalues: sortedValues.slice(0, dimensions),
+                varianceExplained: varianceExplained,
+                samples: samples
+            };
+        }
+
+        function doubleCenterMatrix(matrix) {
+            const n = matrix.length;
+            const centered = [];
+            
+            // Calculate row means
+            const rowMeans = [];
+            for (let i = 0; i < n; i++) {
+                rowMeans[i] = matrix[i].reduce((a, b) => a + b, 0) / n;
+            }
+            
+            // Calculate column means
+            const colMeans = [];
+            for (let j = 0; j < n; j++) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    sum += matrix[i][j];
+                }
+                colMeans[j] = sum / n;
+            }
+            
+            // Calculate grand mean
+            const grandMean = rowMeans.reduce((a, b) => a + b, 0) / n;
+            
+            // Apply double centering formula
+            for (let i = 0; i < n; i++) {
+                centered[i] = [];
+                for (let j = 0; j < n; j++) {
+                    centered[i][j] = -0.5 * (matrix[i][j] - rowMeans[i] - colMeans[j] + grandMean);
+                }
+            }
+            
+            return centered;
+        }
+
+        function eigenDecomposition(matrix) {
+            const n = matrix.length;
+            const maxIterations = 100;
+            const tolerance = 1e-10;
+            
+            // Initialize
+            let A = matrix.map(row => [...row]);
+            let V = [];
+            for (let i = 0; i < n; i++) {
+                V[i] = [];
+                for (let j = 0; j < n; j++) {
+                    V[i][j] = i === j ? 1 : 0;
+                }
+            }
+            
+            // Jacobi iterations
+            for (let iter = 0; iter < maxIterations; iter++) {
+                // Find largest off-diagonal element
+                let maxVal = 0;
+                let p = 0, q = 1;
+                
+                for (let i = 0; i < n; i++) {
+                    for (let j = i + 1; j < n; j++) {
+                        if (Math.abs(A[i][j]) > maxVal) {
+                            maxVal = Math.abs(A[i][j]);
+                            p = i;
+                            q = j;
+                        }
+                    }
+                }
+                
+                if (maxVal < tolerance) break;
+                
+                // Calculate rotation angle
+                const theta = 0.5 * Math.atan2(2 * A[p][q], A[q][q] - A[p][p]);
+                const c = Math.cos(theta);
+                const s = Math.sin(theta);
+                
+                // Apply rotation to A
+                const newA = A.map(row => [...row]);
+                
+                for (let i = 0; i < n; i++) {
+                    if (i !== p && i !== q) {
+                        newA[i][p] = c * A[i][p] - s * A[i][q];
+                        newA[p][i] = newA[i][p];
+                        newA[i][q] = s * A[i][p] + c * A[i][q];
+                        newA[q][i] = newA[i][q];
+                    }
+                }
+                
+                newA[p][p] = c * c * A[p][p] - 2 * c * s * A[p][q] + s * s * A[q][q];
+                newA[q][q] = s * s * A[p][p] + 2 * c * s * A[p][q] + c * c * A[q][q];
+                newA[p][q] = 0;
+                newA[q][p] = 0;
+                
+                A = newA;
+                
+                // Update eigenvectors
+                for (let i = 0; i < n; i++) {
+                    const vip = V[i][p];
+                    const viq = V[i][q];
+                    V[i][p] = c * vip - s * viq;
+                    V[i][q] = s * vip + c * viq;
+                }
+            }
+            
+            // Extract eigenvalues (diagonal of A)
+            const eigenvalues = [];
+            for (let i = 0; i < n; i++) {
+                eigenvalues[i] = A[i][i];
+            }
+            
+            // Transpose V to get eigenvectors as columns
+            const eigenvectors = [];
+            for (let j = 0; j < n; j++) {
+                eigenvectors[j] = [];
+                for (let i = 0; i < n; i++) {
+                    eigenvectors[j][i] = V[i][j];
+                }
+            }
+            
+            return { values: eigenvalues, vectors: eigenvectors };
+        }
+
+        function generateCSVTable(rows, headers) {
+            const csvTableElement = document.getElementById('csvTable');
+            if (!csvTableElement) {
+                console.error('csvTable element not found');
+                return;
+            }
+            
+            const dataRows = rows.slice(1);
+            // Filter out empty rows (rows where first column is null/empty)
+            const validDataRows = dataRows.filter(row => row[0] && row[0] !== '' && row[0] !== null && row[0] !== undefined);
+            
+            let tableHtml = `
+                <div class="csv-table-container">
+                    <table class="csv-table">
+                        <thead>
+                            <tr>`;
+            
+            // Add headers
+            headers.forEach(header => {
+                tableHtml += `<th>${header}</th>`;
+            });
+            tableHtml += `<th>Calculated Score</th></tr></thead><tbody>`;
+            
+            // Add data rows (we'll update with scores later)
+            validDataRows.forEach((row, index) => {
+                tableHtml += `<tr id="csv-row-${index}">`;
+                row.forEach(cell => {
+                    tableHtml += `<td>${cell || ''}</td>`;
+                });
+                tableHtml += `<td class="score-column" id="score-${index}">-</td></tr>`;
+            });
+            
+            tableHtml += '</tbody></table></div>';
+            
+            csvTableElement.innerHTML = tableHtml;
+        }
         function generateCSVTable(rows, headers) {
             const csvTableElement = document.getElementById('csvTable');
             if (!csvTableElement) {
