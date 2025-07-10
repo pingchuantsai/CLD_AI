@@ -481,6 +481,68 @@
         #topclones {
             color: black;
         }
+        .step2-form {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            color: #000000;
+        }
+        .step2-form h5 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        .step2-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 15px;
+        }
+        .step2-table th {
+            background-color: #e9ecef;
+            padding: 8px 6px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+            font-size: 11px;
+            color: #000000;
+        }
+        .step2-table td {
+            padding: 4px;
+            border: 1px solid #dee2e6;
+            text-align: center;
+        }
+        .step2-table input {
+            width: 100%;
+            border: none;
+            background: transparent;
+            text-align: center;
+            font-size: 11px;
+            padding: 2px;
+        }
+        .step2-table input:focus {
+            background: white;
+            outline: 1px solid #007bff;
+        }
+        .step2-buttons {
+            text-align: right;
+            margin-top: 10px;
+        }
+        .step2-buttons button {
+            margin-left: 5px;
+            padding: 5px 12px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-save {
+            background: #28a745;
+            color: white;
+        }
+        .btn-cancel {
+            background: #6c757d;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -946,16 +1008,25 @@
                     let topItemsHtml = '<div>';
                     for (let item of maxItems) {
                         console.log(`Clone ${item[0]} has score ${item[1]}`);
-                        topItemsHtml += `<div style="margin: 10px 0; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: black">
-                            Clone <strong>${item[0]}</strong> has score <strong>${item[1]}</strong>
-                        </div>`;
+                        topItemsHtml += `
+                            <div style="margin: 10px 0; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>Clone <strong>${item[0]}</strong> has score <strong>${item[1]}</strong></span>
+                                    <button onclick="openStep2Data('${item[0]}')" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                                        Add Step 2 Data
+                                    </button>
+                                </div>
+                                <div id="step2-data-${item[0]}" style="display: none; margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                                    <!-- Step 2 data form will be inserted here -->
+                                </div>
+                            </div>`;
                     }
                     topItemsHtml += '</div>';
                     const topItemsElement = document.getElementById('topItems');
                     if (topItemsElement) topItemsElement.innerHTML = topItemsHtml;
 
                     // Generate PCoA Analysis
-                    generatePCoA(allItems, topItemNames,dic);
+                    generatePCoA(allItems, topItemNames, dic);
 
                     // Update CSV table with calculated scores
                     updateCSVTableWithScores(allItems, topItemNames);
@@ -970,7 +1041,8 @@
             
             reader.readAsText(file);
         }
-function generatePCoA(allItems, topItemNames, dicData) {
+
+        function generatePCoA(allItems, topItemNames, dicData) {
             const pcoaChartElement = document.getElementById('pcoaChart');
             if (!pcoaChartElement) {
                 console.error('pcoaChart element not found');
@@ -1095,7 +1167,9 @@ function generatePCoA(allItems, topItemNames, dicData) {
             
             return distanceMatrix;
         }
-function pcoa(distanceDict, dimensions = 2) {
+
+        // PCoA Implementation functions
+        function pcoa(distanceDict, dimensions = 2) {
             // Step 1: Convert dictionary to matrix and get sample names
             const samples = Object.keys(distanceDict);
             const n = samples.length;
@@ -1278,42 +1352,168 @@ function pcoa(distanceDict, dimensions = 2) {
             return { values: eigenvalues, vectors: eigenvectors };
         }
 
-        function generateCSVTable(rows, headers) {
-            const csvTableElement = document.getElementById('csvTable');
-            if (!csvTableElement) {
-                console.error('csvTable element not found');
-                return;
+        // Step 2 Data Management Functions
+        function openStep2Data(cloneId) {
+            const formContainer = document.getElementById(`step2-data-${cloneId}`);
+            
+            if (formContainer.style.display === 'none') {
+                // Show the form
+                formContainer.style.display = 'block';
+                formContainer.innerHTML = generateStep2Form(cloneId);
+            } else {
+                // Hide the form
+                formContainer.style.display = 'none';
             }
-            
-            const dataRows = rows.slice(1);
-            // Filter out empty rows (rows where first column is null/empty)
-            const validDataRows = dataRows.filter(row => row[0] && row[0] !== '' && row[0] !== null && row[0] !== undefined);
-            
-            let tableHtml = `
-                <div class="csv-table-container">
-                    <table class="csv-table">
-                        <thead>
-                            <tr>`;
-            
-            // Add headers
-            headers.forEach(header => {
-                tableHtml += `<th>${header}</th>`;
-            });
-            tableHtml += `<th>Calculated Score</th></tr></thead><tbody>`;
-            
-            // Add data rows (we'll update with scores later)
-            validDataRows.forEach((row, index) => {
-                tableHtml += `<tr id="csv-row-${index}">`;
-                row.forEach(cell => {
-                    tableHtml += `<td>${cell || ''}</td>`;
-                });
-                tableHtml += `<td class="score-column" id="score-${index}">-</td></tr>`;
-            });
-            
-            tableHtml += '</tbody></table></div>';
-            
-            csvTableElement.innerHTML = tableHtml;
         }
+
+        function generateStep2Form(cloneId) {
+            return `
+                <div class="step2-form">
+                    <h5>📊 Step 2 Clone Selection Data - Clone ${cloneId}</h5>
+                    <table class="step2-table">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Clone ID</th>
+                                <th colspan="2">Stability</th>
+                                <th colspan="5">Bioreactor</th>
+                                <th colspan="7">Protein Quality</th>
+                            </tr>
+                            <tr>
+                                <th>Initial Doubling Time (0-D15)</th>
+                                <th>Late Doubling Time (D45-D60)</th>
+                                <th>Peak Lactate</th>
+                                <th>Peak Ammonia</th>
+                                <th>Peak VCD</th>
+                                <th>Harvest Viability</th>
+                                <th>Harvest D Titer</th>
+                                <th>HMW</th>
+                                <th>Main</th>
+                                <th>Heterogen</th>
+                                <th>Glycan 1</th>
+                                <th>Glycan 2</th>
+                                <th>Cell Binding Assay 1</th>
+                                <th>Cell Binding Assay 2</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>${cloneId}</strong></td>
+                                <td><input type="number" step="0.01" placeholder="24.1" id="initial-doubling-${cloneId}"></td>
+                                <td><input type="number" step="0.01" placeholder="23.98" id="late-doubling-${cloneId}"></td>
+                                <td><input type="number" step="0.01" placeholder="1.95" id="peak-lactate-${cloneId}"></td>
+                                <td><input type="number" step="0.01" placeholder="8.53" id="peak-ammonia-${cloneId}"></td>
+                                <td><input type="number" step="0.01" placeholder="33.72" id="peak-vcd-${cloneId}"></td>
+                                <td><input type="number" step="0.01" placeholder="91.72" id="harvest-viability-${cloneId}"></td>
+                                <td><input type="number" step="1" placeholder="2195" id="harvest-titer-${cloneId}"></td>
+                                <td><input type="text" placeholder="3.10%" id="hmw-${cloneId}"></td>
+                                <td><input type="text" placeholder="97.00%" id="main-${cloneId}"></td>
+                                <td><input type="number" step="1" placeholder="0" id="heterogen-${cloneId}"></td>
+                                <td>
+                                    <select id="glycan1-type-${cloneId}" style="width: 80px; font-size: 10px; margin-bottom: 2px;">
+                                        <option value="Sialic acid" selected>Sialic acid</option>
+                                        <option value="Galactose">Galactose</option>
+                                        <option value="Fucose">Fucose</option>
+                                        <option value="Mannose">Mannose</option>
+                                        <option value="G1">G1</option>
+                                        <option value="G2">G2</option>
+                                    </select>
+                                    <input type="number" step="0.1" placeholder="25.0" id="glycan1-value-${cloneId}" style="width: 100%; font-size: 10px;">
+                                </td>
+                                <td>
+                                    <select id="glycan2-type-${cloneId}" style="width: 80px; font-size: 10px; margin-bottom: 2px;">
+                                        <option value="Sialic acid">Sialic acid</option>
+                                        <option value="Galactose">Galactose</option>
+                                        <option value="Fucose">Fucose</option>
+                                        <option value="Mannose" selected>Mannose</option>
+                                        <option value="G1">G1</option>
+                                        <option value="G2">G2</option>
+                                    </select>
+                                    <input type="number" step="0.1" placeholder="15.0" id="glycan2-value-${cloneId}" style="width: 100%; font-size: 10px;">
+                                </td>
+                                <td>
+                                    <select id="assay1-type-${cloneId}" style="width: 60px; font-size: 10px; margin-bottom: 2px;">
+                                        <option value="TCA">TCA</option>
+                                        <option value="CDC">CDC</option>
+                                        <option value="TDCC">TDCC</option>
+                                        <option value="ADCC">ADCC</option>
+                                        <option value="ADCP">ADCP</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    <input type="number" step="0.001" placeholder="8.135" id="assay1-value-${cloneId}" style="width: 100%; font-size: 10px;">
+                                </td>
+                                <td>
+                                    <select id="assay2-type-${cloneId}" style="width: 60px; font-size: 10px; margin-bottom: 2px;">
+                                        <option value="TCA">TCA</option>
+                                        <option value="CDC" selected>CDC</option>
+                                        <option value="TDCC">TDCC</option>
+                                        <option value="ADCC">ADCC</option>
+                                        <option value="ADCP">ADCP</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    <input type="number" step="0.01" placeholder="10.67" id="assay2-value-${cloneId}" style="width: 100%; font-size: 10px;">
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="step2-buttons">
+                        <button class="btn-save" onclick="saveStep2Data('${cloneId}')">Save Data</button>
+                        <button class="btn-cancel" onclick="cancelStep2Data('${cloneId}')">Cancel</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function saveStep2Data(cloneId) {
+            // Collect all the form data
+            const step2Data = {
+                cloneId: cloneId,
+                initialDoubling: document.getElementById(`initial-doubling-${cloneId}`).value,
+                lateDoubling: document.getElementById(`late-doubling-${cloneId}`).value,
+                peakLactate: document.getElementById(`peak-lactate-${cloneId}`).value,
+                peakAmmonia: document.getElementById(`peak-ammonia-${cloneId}`).value,
+                peakVCD: document.getElementById(`peak-vcd-${cloneId}`).value,
+                harvestViability: document.getElementById(`harvest-viability-${cloneId}`).value,
+                harvestTiter: document.getElementById(`harvest-titer-${cloneId}`).value,
+                hmw: document.getElementById(`hmw-${cloneId}`).value,
+                main: document.getElementById(`main-${cloneId}`).value,
+                heterogen: document.getElementById(`heterogen-${cloneId}`).value,
+                glycan1Type: document.getElementById(`glycan1-type-${cloneId}`).value,
+                glycan1Value: document.getElementById(`glycan1-value-${cloneId}`).value,
+                glycan2Type: document.getElementById(`glycan2-type-${cloneId}`).value,
+                glycan2Value: document.getElementById(`glycan2-value-${cloneId}`).value,
+                assay1Type: document.getElementById(`assay1-type-${cloneId}`).value,
+                assay1Value: document.getElementById(`assay1-value-${cloneId}`).value,
+                assay2Type: document.getElementById(`assay2-type-${cloneId}`).value,
+                assay2Value: document.getElementById(`assay2-value-${cloneId}`).value
+            };
+
+            // Store the data (in a real application, this would be sent to a server)
+            console.log('Step 2 Data for Clone', cloneId, ':', step2Data);
+            
+            // Show success message with glycan and assay types
+            const glycan1Info = step2Data.glycan1Type && step2Data.glycan1Value ? `${step2Data.glycan1Type}: ${step2Data.glycan1Value}%` : 'Not specified';
+            const glycan2Info = step2Data.glycan2Type && step2Data.glycan2Value ? `${step2Data.glycan2Type}: ${step2Data.glycan2Value}%` : 'Not specified';
+            const assay1Info = step2Data.assay1Type && step2Data.assay1Value ? `${step2Data.assay1Type}: ${step2Data.assay1Value}` : 'Not specified';
+            const assay2Info = step2Data.assay2Type && step2Data.assay2Value ? `${step2Data.assay2Type}: ${step2Data.assay2Value}` : 'Not specified';
+            
+            alert(`Step 2 data saved for Clone ${cloneId}!\n\nGlycan Analysis:\n- ${glycan1Info}\n- ${glycan2Info}\n\nCell Binding Assays:\n- ${assay1Info}\n- ${assay2Info}`);
+            
+            // Hide the form
+            document.getElementById(`step2-data-${cloneId}`).style.display = 'none';
+            
+            // Update button text to show data has been entered
+            const button = document.querySelector(`button[onclick="openStep2Data('${cloneId}')"]`);
+            if (button) {
+                button.textContent = 'View/Edit Step 2 Data';
+                button.style.background = '#28a745';
+            }
+        }
+
+        function cancelStep2Data(cloneId) {
+            // Hide the form without saving
+            document.getElementById(`step2-data-${cloneId}`).style.display = 'none';
+        }
+
         function generateCSVTable(rows, headers) {
             const csvTableElement = document.getElementById('csvTable');
             if (!csvTableElement) {
